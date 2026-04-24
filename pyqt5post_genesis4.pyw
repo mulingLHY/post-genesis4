@@ -67,7 +67,7 @@ def _setup_logger(level=logging.INFO):
         _logger.addHandler(handler)
     return _logger
 
-_logger = _setup_logger(level=logging.DEBUG)
+_logger = _setup_logger(level=logging.INFO)
 
 def fwhm(x, data):
     peak_index = np.argmax(data)
