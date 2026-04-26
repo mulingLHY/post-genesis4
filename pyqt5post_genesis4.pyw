@@ -1,7 +1,7 @@
 # -*- encoding: utf-8 -*-
 '''
 @File    :   pyqt5post_genesis4.pyw
-@Time    :   2026/04/23 12:04:00
+@Time    :   2026/04/26 13:37:25
 @Author  :   lihaiyang from SINAP 
 '''
 
@@ -37,7 +37,6 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker
-from dataclasses import dataclass
 import logging
 import sys
 import os
@@ -45,7 +44,6 @@ from scipy.constants import speed_of_light
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QProgressBar
-import platform
 
 def _setup_logger(level=logging.INFO):
     _logger = logging.getLogger(__name__)
@@ -114,7 +112,6 @@ class WaitingDialog(QDialog):
         self.progress.setRange(0, 0)
         self.layout().addWidget(self.progress)
 
-@dataclass
 class MainPlotUnit(QtWidgets.QWidget):
     ipypost4: "IPyPostGenesis4" = None
     slice_control: "SliceControl" = None
@@ -182,8 +179,14 @@ class MainPlotUnit(QtWidgets.QWidget):
     _find_peak_checkbox: QtWidgets.QCheckBox = None
     _y_zero_line_checkbox: QtWidgets.QCheckBox = None
 
-    def init(self):
+    def __init__(self, ipypost4:"IPyPostGenesis4", ax: plt.Axes, slice_control: "SliceControl", color: str, label: str):
         super().__init__()
+
+        self.ipypost4 = ipypost4
+        self.ax = ax
+        self.slice_control = slice_control
+        self.color = color
+        self.label = label
 
         self.ax.figure.canvas.mpl_connect('draw_event', lambda event: self.update_text_visiable(event))
             
@@ -272,13 +275,10 @@ class MainPlotUnit(QtWidgets.QWidget):
         self._h5dataset_widget.blockSignals(False)
     
     def fetch_data(self):
-        if not self.ipypost4._initialized:
-            return
-        
         if self.data_tag == f'/{self.h5group}/{self.h5dataset}':
             return
         
-        del self.data
+        if self.data is not None: del self.data
         self.data = self.ipypost4.fetch_data(f'/{self.h5group}/{self.h5dataset}')
         self.data_tag = f'/{self.h5group}/{self.h5dataset}'
 
@@ -289,8 +289,6 @@ class MainPlotUnit(QtWidgets.QWidget):
 
     def on_dataset_change(self, text):
         _logger.debug(f"on_dataset_change: self.h5group={self.h5group}, self.h5dataset={self.h5dataset}")
-        self.fetch_data()
-        
         self.ipypost4.plot_new_dataset()
     
     def on_group_change(self, button: QtWidgets.QPushButton, checked: bool): 
@@ -521,7 +519,7 @@ class BriefLatticePlotUnit:
         self.z_line = None
         
         self.preprocess_data()
-        for f in np.linspace(0.01, 1.01, 18):
+        for f in np.linspace(0.01, 1.01, 20):
             self.ax.plot(self.z, self.aw*f, linewidth=0.6, color='orange', drawstyle='steps-post')
             self.ax_twin.plot(self.z, self.qf*f, linewidth=0.6, color='b', drawstyle='steps-post')
 
@@ -748,7 +746,7 @@ class FFTSpectrumPlotUnit(QtWidgets.QWidget):
         if self.ax.get_visible():
             self.plot_new()
 
-@dataclass
+
 class SliceControl(QtWidgets.QWidget):
     ipypost4: "IPyPostGenesis4" = None
 
@@ -798,8 +796,11 @@ class SliceControl(QtWidgets.QWidget):
     _slice_at_z_idx = 0
     _slice_at_s_idx = 0
 
-    def init(self):
+    def __init__(self, ipypost4:"IPyPostGenesis4"):
         super().__init__()
+
+        self.ipypost4 = ipypost4
+
         self.setLayout(QtWidgets.QHBoxLayout())
 
         self._plot_axis_x_widget = QtWidgets.QButtonGroup()
@@ -887,7 +888,6 @@ class GifExporter(QtWidgets.QWidget):
     def __init__(self, ipypost4: "IPyPostGenesis4"):
         self.ipypost4 = ipypost4
 
-    def init(self):
         super().__init__()
 
         self.setLayout(QtWidgets.QHBoxLayout())
@@ -972,34 +972,21 @@ default_plot_config = {
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanva
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
-class WinCopyableNavigationToolbar(NavigationToolbar):
+class CopyableNavigationToolbar(NavigationToolbar):
     toolitems = NavigationToolbar.toolitems + [
         ('Copy\nImg', 'Copy the figure to clipboard', 'copy', 'copy_figure'),
     ]
 
     def copy_figure(self):
         import io
-        import win32clipboard
-        from PIL import Image
         buf = io.BytesIO()
         self.canvas.figure.savefig(buf, format="png", bbox_inches="tight")
         buf.seek(0)
 
-        # 使用 PIL 加载图像
-        image = Image.open(buf)
-        output = io.BytesIO()
-        image.convert("RGB").save(output, "BMP")
-        data = output.getvalue()[14:]  # 去掉 BMP 文件头
-        output.close()
-        buf.close()
+        img = QtGui.QImage.fromData(buf.read())
+        img = img.convertToFormat(QtGui.QImage.Format_RGB32)
+        QtWidgets.QApplication.clipboard().setImage(img)
 
-        # 打开剪贴板并写入图像数据
-        win32clipboard.OpenClipboard()
-        try:
-            win32clipboard.EmptyClipboard()
-            win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
-        finally:
-            win32clipboard.CloseClipboard()
 
 class Genesis4MetaDataWindow(QtWidgets.QWidget):
     meta_data: dict = {}
@@ -1095,14 +1082,6 @@ class IPyPostGenesis4Builder:
         # print(self.dataset_in_groups)
 
 class IPyPostGenesis4(QtWidgets.QWidget):
-    _instances = {} 
-
-    def __new__(cls, builder, igui_id:int=0, **kwargs):
-        if igui_id not in cls._instances:
-            instance = super().__new__(cls)
-            cls._instances[igui_id] = instance
-            instance._initialized = False
-        return cls._instances[igui_id]
     
     @property
     def second_curve(self):
@@ -1111,7 +1090,7 @@ class IPyPostGenesis4(QtWidgets.QWidget):
     def second_curve(self, value):
         self.second_curve_checkbox.setChecked(value)
         
-    def __init__(self, builder:IPyPostGenesis4Builder, plot_config:dict=default_plot_config, force_config:bool=False, igui_id:int=0):
+    def __init__(self, builder:IPyPostGenesis4Builder, plot_config:dict=default_plot_config, force_config:bool=False):
         self.h5_file = builder.h5_file
         self.zplot = builder.zplot
         self.s_values = builder.s_values
@@ -1122,96 +1101,98 @@ class IPyPostGenesis4(QtWidgets.QWidget):
         self.dataset_in_groups = builder.dataset_in_groups
 
         # 初始化绘图
-        if not self._initialized:
-            super().__init__()
-            self.setLayout(QtWidgets.QVBoxLayout())
-            self.wait_data_dialog = WaitingDialog(self.window(), title="Waiting...", message="Waiting for data...")
+        super().__init__()
+        self.setLayout(QtWidgets.QVBoxLayout())
+        self.wait_data_dialog = WaitingDialog(self.window(), title="Waiting...", message="Waiting for data...")
 
-            self.fig = plt.figure(figsize=(20, 40), dpi=120)
-            self.fig.subplots_adjust(top=0.88, bottom=0.12, left=0.08, right=0.95, hspace=0.1, wspace=0.2)
-            self.gs = self.fig.add_gridspec(1, 3, width_ratios=[12, 1, 4], wspace=0.04)
-            self.gs.set_width_ratios([12, 0.1, 0.1])
+        self.fig = plt.figure(figsize=(20, 40), dpi=120)
+        self.fig.subplots_adjust(top=0.88, bottom=0.12, left=0.08, right=0.95, hspace=0.1, wspace=0.2)
+        self.gs = self.fig.add_gridspec(1, 3, width_ratios=[12, 1, 4], wspace=0.04)
+        self.gs.set_width_ratios([12, 0.1, 0.1])
 
-            self.main_ax = self.fig.add_subplot(self.gs[0])
-            self.feature_ax = self.fig.add_subplot(self.gs[2])
+        self.main_ax = self.fig.add_subplot(self.gs[0])
+        self.feature_ax = self.fig.add_subplot(self.gs[2])
 
-            self.feature_ax.set_visible(False)
-            self.fig.canvas.draw_idle()
+        self.feature_ax.set_visible(False)
+        self.fig.canvas.draw_idle()
 
-            # self.fig_width_px = self.fig.get_size_inches()[0] * self.fig.dpi
-            self.lattice_ax = self.fig.add_axes(self.parse_lattice_ax_posision())
-            self.lattice_plot_unit = BriefLatticePlotUnit(ipypost4=self, ax=self.lattice_ax)
+        # self.fig_width_px = self.fig.get_size_inches()[0] * self.fig.dpi
+        self.lattice_ax = self.fig.add_axes(self.parse_lattice_ax_posision())
+        self.lattice_plot_unit = BriefLatticePlotUnit(ipypost4=self, ax=self.lattice_ax)
 
-            self.slice_control = SliceControl(ipypost4=self)
-            self.slice_control.init()
+        self.slice_control = SliceControl(ipypost4=self)
 
-            self.plot_unit1 = MainPlotUnit(ipypost4=self, ax=self.main_ax, slice_control=self.slice_control, color='#00739c', label='1')
-            self.plot_unit2 = MainPlotUnit(ipypost4=self, ax=self.main_ax.twinx(), slice_control=self.slice_control, color='#e24200', label='2')
-            self.plot_unit2.ax.set_visible(False)
+        self.plot_unit1 = MainPlotUnit(ipypost4=self, ax=self.main_ax, slice_control=self.slice_control, color='#00739c', label='1')
+        self.plot_unit2 = MainPlotUnit(ipypost4=self, ax=self.main_ax.twinx(), slice_control=self.slice_control, color='#e24200', label='2')
+        self.plot_unit2.ax.set_visible(False)
 
-            self.plot_unit1.init()
-            self.plot_unit2.init()
+        self.fft_spectrum_plot_unit = FFTSpectrumPlotUnit(ipypost4=self, ax=self.feature_ax)
 
-            self.fft_spectrum_plot_unit = FFTSpectrumPlotUnit(ipypost4=self, ax=self.feature_ax)
+        aux_group = QtWidgets.QHBoxLayout()
+        aux_group.setContentsMargins(10, 0, 0, 0)
+        aux_group.setAlignment(QtCore.Qt.AlignLeft)
+        self.second_curve_checkbox = QtWidgets.QCheckBox('Second curve')
+        self.second_curve_checkbox.setMaximumWidth(160)
+        self.second_curve_checkbox.stateChanged.connect(self.on_second_curve_checkbox_change)
 
-            aux_group = QtWidgets.QHBoxLayout()
-            aux_group.setContentsMargins(10, 0, 0, 0)
-            aux_group.setAlignment(QtCore.Qt.AlignLeft)
-            self.second_curve_checkbox = QtWidgets.QCheckBox('Second curve')
-            self.second_curve_checkbox.setMaximumWidth(160)
-            self.second_curve_checkbox.stateChanged.connect(self.on_second_curve_checkbox_change)
+        self.lattice_plot_checkbox = QtWidgets.QCheckBox('Brief Lattice')
+        self.lattice_plot_checkbox.setMaximumWidth(160)
+        self.lattice_plot_checkbox.stateChanged.connect(self.on_lattice_plot_checkbox_change)
+        self.lattice_plot_unit.ax.set_visible(False)
 
-            self.lattice_plot_checkbox = QtWidgets.QCheckBox('Brief Lattice')
-            self.lattice_plot_checkbox.setMaximumWidth(160)
-            self.lattice_plot_checkbox.stateChanged.connect(self.on_lattice_plot_checkbox_change)
-            self.lattice_plot_unit.ax.set_visible(False)
+        self.lockyscale_checkbox = QtWidgets.QCheckBox('Lock y-scale')
+        self.lockyscale_checkbox.setMaximumWidth(160)
+        self.lockyscale_checkbox.stateChanged.connect(lambda change:self.update_plot_slice() if not change else None)
+        aux_group.addWidget(self.second_curve_checkbox)
+        aux_group.addWidget(self.lockyscale_checkbox)
+        aux_group.addWidget(self.lattice_plot_checkbox)
+        aux_group.addStretch(1)
+        aux_group.addWidget(self.fft_spectrum_plot_unit)
 
-            self.lockyscale_checkbox = QtWidgets.QCheckBox('Lock y-scale')
-            self.lockyscale_checkbox.setMaximumWidth(160)
-            self.lockyscale_checkbox.stateChanged.connect(lambda change:self.update_plot_slice() if not change else None)
-            aux_group.addWidget(self.second_curve_checkbox)
-            aux_group.addWidget(self.lockyscale_checkbox)
-            aux_group.addWidget(self.lattice_plot_checkbox)
-            aux_group.addStretch(1)
-            aux_group.addWidget(self.fft_spectrum_plot_unit)
+        self._fig_widget = FigureCanva(self.fig)
+        self.opitions_group = QtWidgets.QGroupBox('Options')
+        self.opitions_group.setLayout(QtWidgets.QHBoxLayout())
+        self.opitions_group.layout().addWidget(self.plot_unit1)
+        space_between = QtWidgets.QLabel(); space_between.setMaximumWidth(100)
+        self.opitions_group.layout().addWidget(space_between)
+        self.opitions_group.layout().addWidget(self.plot_unit2)
 
-            self._fig_widget = FigureCanva(self.fig)
-            self.opitions_group = QtWidgets.QGroupBox('Options')
-            self.opitions_group.setLayout(QtWidgets.QHBoxLayout())
-            self.opitions_group.layout().addWidget(self.plot_unit1)
-            space_between = QtWidgets.QLabel(); space_between.setMaximumWidth(100)
-            self.opitions_group.layout().addWidget(space_between)
-            self.opitions_group.layout().addWidget(self.plot_unit2)
-
-            self.layout().addWidget(self.opitions_group)
-            self.layout().addWidget(self.slice_control)
-            self.layout().addLayout(aux_group)
+        self.layout().addWidget(self.opitions_group)
+        self.layout().addWidget(self.slice_control)
+        self.layout().addLayout(aux_group)
 
 
-            self.layout().addWidget(self._fig_widget)
-            if platform.system() == 'Windows':
-                self.layout().addWidget(WinCopyableNavigationToolbar(self._fig_widget, self))
-            else:
-                self.layout().addWidget(NavigationToolbar(self._fig_widget, self))
+        self.layout().addWidget(self._fig_widget)
+        self.layout().addWidget(CopyableNavigationToolbar(self._fig_widget, self))
 
-            self.gifexporter = GifExporter(ipypost4=self)
-            self.gifexporter.init()
+        self.gifexporter = GifExporter(ipypost4=self)
 
-            self.layout().addWidget(self.gifexporter)
-            self.layout().setContentsMargins(5, 10, 5, 0)
-        else:
-            self.plot_unit1.reinit()
-            self.plot_unit2.reinit()
+        self.layout().addWidget(self.gifexporter)
+        self.layout().setContentsMargins(5, 10, 5, 0)
 
-            self.slice_control.reinit()
-            self.fft_spectrum_plot_unit.reinit()
-        
-        if not self._initialized or force_config:
-            self.__apply_plot_config(plot_config)
+        self.__apply_plot_config(plot_config)
 
-        self._initialized = True  
 
         self.plot_new_dataset()
+
+    def reinit(self, builder:IPyPostGenesis4Builder):
+        self.h5_file = builder.h5_file
+        self.zplot = builder.zplot
+        self.s_values = builder.s_values
+        self.h5group_options = builder.h5group_options
+        for group_name in self.h5group_options:
+            if group_name.startswith('Field'):
+                default_plot_config['plot_unit2']['h5group'] = group_name
+        self.dataset_in_groups = builder.dataset_in_groups
+
+        self.plot_unit1.reinit()
+        self.plot_unit2.reinit()
+
+        self.slice_control.reinit()
+        self.fft_spectrum_plot_unit.reinit()
+
+        self.plot_new_dataset()
+
 
     def __apply_plot_config(obj, plot_config:dict):
         if plot_config is None:
@@ -1228,8 +1209,6 @@ class IPyPostGenesis4(QtWidgets.QWidget):
         return [pos.x0, pos.y0 + pos.height + new_height/4, pos.width, new_height]
     
     def fetch_data(self, *data_path:str):
-        if not self._initialized:
-            return
         self.wait_data_dialog.show()
 
         res = []
@@ -1291,8 +1270,6 @@ class IPyPostGenesis4(QtWidgets.QWidget):
         self.fig.canvas.draw_idle()
 
     def update_plot_slice(self):
-        if not self._initialized:
-            return
         self.fig.canvas.toolbar._nav_stack.back()
         
         # update plot and autoscale
@@ -1329,9 +1306,6 @@ class IPyPostGenesis4(QtWidgets.QWidget):
         # self.fig.canvas.draw_idle()
             
     def plot_new_dataset(self):
-        if not self._initialized:
-            return
-
         _logger.debug('enter plot_new_dataset')
         self.plot_unit1.plot_new(antialiased=True)
         self.plot_unit1.ax.grid(axis='x', linestyle=':', alpha=0.8)
@@ -1785,10 +1759,12 @@ class PostGenesis4MainWindow(QtWidgets.QMainWindow):
         if not path: return
         _logger.debug('select_history_file: {}'.format(path))
 
-        if self.f_gui:
-            self.f_gui.close()
+
         if self.h5_file:
             self.h5_file.close()
+        if self.f_gui:
+            self.f_gui.close()
+
         # DEPRECATED: remove the '.out' check
         if path.endswith('.out'):
             if not os.path.isfile(path + '.ipypostgenesis4.out.h5') or os.path.getmtime(path) > os.path.getmtime(path + '.ipypostgenesis4.out.h5'):
@@ -1824,7 +1800,7 @@ class PostGenesis4MainWindow(QtWidgets.QMainWindow):
             self.tip_label.hide()
             self.post_layout.addWidget(self._post_widget)
         else:
-            self._post_widget = IPyPostGenesis4(self.post_builder)
+            self._post_widget.reinit(self.post_builder)
 
 
 if __name__ == '__main__':
