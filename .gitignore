@@ -1,0 +1,9 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+dist/
+*.egg-info/
+
+post_genesis4.log
+todo.json

@@ -1,6 +1,18 @@
 # post-genesis4
 This is a PyQt5 GUI application for visualizing the output of Genesis1.3-Version4 and Genesis1.3-Version2 (experimentally supports).
 
+### Installation
+You can install with 
+```shell
+pip install post-genesis4
+```
+After installation, you can run the application with command
+```shell
+post-genesis4
+```
+
+### Usage
+
 With file input box empty, `Open` button will open a file dialog to select one or more Genesis output file.
 You can also input a Genesis output file path in the file input box, and then click `Open` button to load the data. 
 

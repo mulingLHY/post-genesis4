@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "post-genesis4"
+version = "1.0.0"
+description = "A PyQt5 GUI application for visualizing Genesis4 output files"
+readme = "README.md"
+license = {text = "GPLv3"}
+requires-python = ">=3.8"
+authors = [
+    {name = "Haiyang Li"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "PyQt5>=5.15.0",
+    "h5py>=3.0.0",
+    "numpy>=1.20.0",
+    "matplotlib>=3.4.0",
+    "scipy>=1.7.0",
+]
+
+[project.scripts]
+post-genesis4 = "post_genesis4.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["post_genesis4*"]
