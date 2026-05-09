@@ -5,8 +5,10 @@ This package provides tools for visualizing and analyzing output from
 Genesis1.3-Version4 and Genesis1.3-Version2 (experimentally supported).
 """
 
-__version__ = "1.0.0"
-__author__ = "Haiyang Li"
+from importlib.metadata import version, metadata
+
+__version__ = version("post-genesis4")
+__author__ = metadata("post-genesis4")["Author"]
 
 from post_genesis4.cli import show
 

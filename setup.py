@@ -12,7 +12,7 @@ if os.path.exists(readme_path):
 
 setup(
     name="post-genesis4",
-    version="1.0.0",
+    version="1.0.1",
     author="Haiyang Li",
     description="A PyQt5 GUI application for visualizing Genesis4 output files",
     long_description=long_description,

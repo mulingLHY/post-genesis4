@@ -351,7 +351,7 @@ def convert_genesis2_output_to_genesis4_hdf5(filePath: str, outfilePath: str = N
         # Map field parameters
         field_map = {
             'power': ('power', 'W'),
-            'far_field': ('intensity-farfield', 'W/rad^2'),
+            'far_field': ('far_field', 'W/rad^2'),
             'p_mid': ('intensity-nearfield', ''),
             'phi_mid': ('phase-nearfield', 'rad'),
             'r_size': ('r_size', 'm'),
@@ -361,6 +361,15 @@ def convert_genesis2_output_to_genesis4_hdf5(filePath: str, outfilePath: str = N
             dset = field_group.create_dataset(field_map[key][0], data=getattr(g2, key).T)
             dset.attrs['unit'] = np.bytes_(field_map[key][1])
             QtWidgets.QApplication.processEvents()
+        
+        # For compatible with FFTSpectrum
+        dset = field_group.create_dataset('intensity-farfield', data=np.zeros_like(getattr(g2, 'far_field').T))
+        dset.attrs['unit'] = np.bytes_('W/rad^2')
+        QtWidgets.QApplication.processEvents()
+        dset = field_group.create_dataset('phase-farfield', data=np.zeros_like(getattr(g2, 'far_field').T))
+        dset.attrs['unit'] = np.bytes_('rad')
+        QtWidgets.QApplication.processEvents()
+
         # TODO: add support for harmonics out.
 
         del g2

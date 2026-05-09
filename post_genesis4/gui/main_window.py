@@ -19,6 +19,7 @@ from post_genesis4.gui.core_pannel import IPyPostGenesis4, IPyPostGenesis4Builde
 from post_genesis4.gui.metadata_window import Genesis4MetaDataWindow
 from post_genesis4.gui.widgets import WaitingDialog
 
+from importlib.metadata import version
 
 
 # Help text displayed when no file is loaded
@@ -69,7 +70,7 @@ class PostGenesis4MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         """Initialize main window."""
         super(PostGenesis4MainWindow, self).__init__(parent)
-        self.setWindowTitle('PyPostGenesis4')
+        self.setWindowTitle('PyPostGenesis4 - V'+version("post-genesis4"))
         self.resize(1650, 1150)
 
         # State variables

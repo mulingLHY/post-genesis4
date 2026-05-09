@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "post-genesis4"
-version = "1.0.0"
+version = "1.0.1"
 description = "A PyQt5 GUI application for visualizing Genesis4 output files"
 readme = "README.md"
 license = {text = "GPLv3"}
